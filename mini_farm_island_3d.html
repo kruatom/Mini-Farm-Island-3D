@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mini Farm Island 3D - Ultimate</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; touch-action: none; font-family: 'Sarabun', sans-serif; }
+        #game-container { width: 100vw; height: 100vh; display: block; }
+        
+        /* UI Styles */
+        .ui-panel { background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 8px; pointer-events: auto; border: 2px solid #e5e7eb; }
+        .progress-bar-container { width: 40px; height: 8px; background: #333; border-radius: 4px; position: absolute; display: none; transform: translate(-50%, -50%); border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.3);}
+        .progress-bar-fill { height: 100%; background: #4ade80; border-radius: 2px; width: 0%; transition: background-color 0.3s;}
+        .progress-bar-fill.bugged { background: #ef4444; }
+        .floating-text { position: absolute; font-weight: bold; font-size: 14px; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; display: none; transform: translate(-50%, -50%); pointer-events: none; z-index: 5;}
+        
+        /* Mobile Controls */
+        #mobile-controls { display: none; position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        #joystick-zone { position: absolute; bottom: 30px; left: 30px; width: 120px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 50%; pointer-events: auto; border: 2px solid rgba(255,255,255,0.5); }
+        #joystick-stick { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: rgba(255,255,255,0.8); border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.2); pointer-events: none; }
+        #action-btn { position: absolute; bottom: 30px; right: 30px; width: 70px; height: 70px; background: #facc15; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 24px; color: white; border: 4px solid #ca8a04; pointer-events: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: transform 0.1s; }
+        #action-btn:active { transform: scale(0.95); background: #eab308; }
+
+        @media (hover: none) and (pointer: coarse) {
+            #mobile-controls { display: block; }
+            #pc-hint { display: none; }
+        }
+
+        /* Modals */
+        .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 50; pointer-events: auto; flex-direction: column; }
+        
+        .seed-select-btn { border: 2px solid transparent; transition: all 0.2s; }
+        .seed-select-btn.active { border-color: #3b82f6; background-color: #eff6ff; transform: scale(1.05); }
+
+        .shake { animation: shake 0.5s; }
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+
+        /* Notification */
+        #notification-area { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 40; display: flex; flex-direction: column; gap: 5px; align-items: center;}
+        .notify-msg { background: rgba(0,0,0,0.8); color: white; padding: 5px 15px; border-radius: 20px; font-size: 14px; animation: fadeout 3s forwards; }
+        @keyframes fadeout { 0% { opacity: 1; transform: translateY(0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-20px); } }
+    </style>
+</head>
+<body>
+
+    <!-- WebGL Canvas -->
+    <div id="game-container"></div>
+
+    <!-- UI Overlay -->
+    <div id="game-ui" class="absolute top-0 left-0 w-full h-full pointer-events-none p-2 md:p-4 flex flex-col justify-between z-10 hidden">
+        
+        <!-- Top Row -->
+        <div class="flex justify-between items-start gap-2">
+            <!-- Left Stats -->
+            <div class="flex flex-col gap-2">
+                <div class="ui-panel flex flex-col gap-1 min-w-[130px]">
+                    <div class="text-xs text-gray-500 font-bold border-b pb-1 mb-1 flex justify-between">
+                        <span id="player-name-display">ชาวสวน</span>
+                        <span id="time-display" class="text-blue-500"><i class="fas fa-sun"></i> กลางวัน</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-yellow-600 font-bold">
+                        <i class="fas fa-coins text-yellow-500 w-4"></i>
+                        <span id="coin-display">100</span> ฿
+                    </div>
+                    <div class="flex items-center gap-2 text-blue-600 font-bold">
+                        <i class="fas fa-star text-blue-500 w-4"></i>
+                        <span id="score-display">0</span> คะแนน
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Shop -->
+            <div class="ui-panel flex flex-col gap-1.5 items-end max-w-[160px]">
+                <div class="text-xs font-bold text-gray-500 mb-1 border-b pb-1 w-full text-right"><i class="fas fa-store"></i> ร้านค้า</div>
+                
+                <!-- Seeds -->
+                <button onclick="buySeed('carrot')" class="bg-orange-500 text-white px-2 py-1 rounded shadow hover:bg-orange-600 pointer-events-auto text-xs flex items-center justify-between w-full">
+                    <span>แครอท</span> <span>-5฿</span>
+                </button>
+                <button onclick="buySeed('tomato')" class="bg-red-500 text-white px-2 py-1 rounded shadow hover:bg-red-600 pointer-events-auto text-xs flex items-center justify-between w-full">
+                    <span>มะเขือเทศ</span> <span>-10฿</span>
+                </button>
+                <button onclick="buySeed('melon')" class="bg-green-600 text-white px-2 py-1 rounded shadow hover:bg-green-700 pointer-events-auto text-xs flex items-center justify-between w-full">
+                    <span>เมลอน</span> <span>-20฿</span>
+                </button>
+                <hr class="w-full my-1 border-gray-200">
+                
+                <!-- Upgrades -->
+                <button onclick="buyPlot()" id="btn-buy-plot" class="bg-purple-500 text-white px-2 py-1 rounded shadow hover:bg-purple-600 pointer-events-auto text-xs w-full flex justify-between">
+                    <span>ขยายที่ดิน</span> <span>-20฿</span>
+                </button>
+                <button onclick="buyRobot()" id="btn-buy-robot" class="bg-blue-500 text-white px-2 py-1 rounded shadow hover:bg-blue-600 pointer-events-auto text-xs w-full flex justify-between">
+                    <span><i class="fas fa-robot"></i> หุ่นยนต์</span> <span>-100฿</span>
+                </button>
+                <button onclick="buyDog()" id="btn-buy-dog" class="bg-amber-600 text-white px-2 py-1 rounded shadow hover:bg-amber-700 pointer-events-auto text-xs w-full flex justify-between">
+                    <span><i class="fas fa-dog"></i> สุนัข</span> <span>-150฿</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom Row (Seed Selector) -->
+        <div class="flex justify-center mb-16 md:mb-4 pointer-events-auto">
+            <div class="ui-panel flex gap-2">
+                <button id="sel-carrot" onclick="selectSeed('carrot')" class="seed-select-btn active flex flex-col items-center p-2 rounded cursor-pointer w-14">
+                    <div class="w-6 h-6 rounded-full bg-orange-500 mb-1 border-2 border-green-600 flex items-center justify-center text-[10px] text-white"><i class="fas fa-carrot"></i></div>
+                    <span class="text-xs font-bold" id="inv-carrot">3</span>
+                </button>
+                <button id="sel-tomato" onclick="selectSeed('tomato')" class="seed-select-btn flex flex-col items-center p-2 rounded cursor-pointer w-14 bg-gray-50">
+                    <div class="w-6 h-6 rounded-full bg-red-500 mb-1 border-2 border-green-600 flex items-center justify-center text-[10px] text-white"><i class="fas fa-apple-whole"></i></div>
+                    <span class="text-xs font-bold" id="inv-tomato">0</span>
+                </button>
+                <button id="sel-melon" onclick="selectSeed('melon')" class="seed-select-btn flex flex-col items-center p-2 rounded cursor-pointer w-14 bg-gray-50">
+                    <div class="w-6 h-6 rounded-full bg-green-600 mb-1 border-2 border-green-900 flex items-center justify-center text-[10px] text-white">●</div>
+                    <span class="text-xs font-bold" id="inv-melon">0</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Area -->
+    <div id="notification-area"></div>
+
+    <!-- On-screen elements for 3D tracking -->
+    <div id="html-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-0"></div>
+
+    <!-- Mobile Controls -->
+    <div id="mobile-controls">
+        <div id="joystick-zone">
+            <div id="joystick-stick"></div>
+        </div>
+        <div id="action-btn">
+            <i class="fas fa-hand-pointer"></i>
+        </div>
+    </div>
+
+    <!-- PC Hint -->
+    <div id="pc-hint" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 ui-panel text-gray-600 text-xs md:text-sm text-center hidden">
+        <b>W A S D</b> เดิน | <b>Spacebar</b> ปลูก/เก็บ/ไล่แมลง-โจร<br>
+        <b>คลิกซ้ายลาก</b> หมุนกล้อง
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal-overlay">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full mx-4 text-center border-t-8 border-green-500">
+            <h1 class="text-3xl font-bold text-green-600 mb-2"><i class="fas fa-tractor"></i> Ultimate Farm</h1>
+            <p class="text-gray-500 mb-4 text-sm">ปลูกผัก 15 แปลง ซื้อหุ่นยนต์ ระวังโจร และตอบคำถามวิทย์ ป.4!</p>
+            <input type="text" id="player-name-input" placeholder="ใส่ชื่อของคุณ..." class="w-full p-3 border-2 border-gray-200 rounded-lg mb-4 text-lg focus:outline-none focus:border-green-500 text-center" maxlength="15">
+            <button onclick="startGame()" class="w-full bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 transition text-lg">เริ่มเกมเลย!</button>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="gameover-modal" class="modal-overlay hidden">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full mx-4 text-center border-t-8 border-red-500">
+            <h1 class="text-3xl font-bold text-red-600 mb-2"><i class="fas fa-skull-crossbones"></i> ล้มละลาย!</h1>
+            <p class="text-gray-500 mb-6">คุณไม่มีเงินและเมล็ดพันธุ์เหลือแล้ว</p>
+            
+            <div class="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+                <div class="flex justify-between mb-2">
+                    <span class="text-gray-600">ชาวสวน:</span>
+                    <span class="font-bold text-gray-800" id="go-name">-</span>
+                </div>
+                <div class="flex justify-between mb-2">
+                    <span class="text-gray-600">คะแนนรวม:</span>
+                    <span class="font-bold text-blue-600 text-xl" id="go-score">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">ตอบถูกทั้งหมด:</span>
+                    <span class="font-bold text-green-600" id="go-correct">0 ข้อ</span>
+                </div>
+            </div>
+
+            <button onclick="restartGame()" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition text-lg">เล่นใหม่อีกครั้ง</button>
+        </div>
+    </div>
+
+    <!-- Quiz Modal -->
+    <div id="quiz-modal" class="modal-overlay hidden">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-md w-full mx-4 border-t-8 border-blue-500 relative">
+            <h2 class="text-lg font-bold text-blue-700 mb-3"><i class="fas fa-microscope mr-2"></i> วิทย์ ป.4: การจำแนกสิ่งมีชีวิต</h2>
+            <p id="quiz-question" class="text-gray-800 text-base md:text-lg mb-5 font-medium leading-relaxed">คำถามจะปรากฏที่นี่?</p>
+            <div id="quiz-options" class="flex flex-col gap-2">
+                <!-- Options injected here -->
+            </div>
+            <div id="quiz-feedback" class="mt-4 text-center font-bold text-lg hidden"></div>
+        </div>
+    </div>
+
+    <!-- Three.js and Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // --- Game Config & Data ---
+        const SEEDS = {
+            carrot: { id: 'carrot', name: 'แครอท', cost: 5, growTime: 6, reward: 10, color: 0xf97316 }, 
+            tomato: { id: 'tomato', name: 'มะเขือเทศ', cost: 10, growTime: 12, reward: 25, color: 0xef4444 },
+            melon: { id: 'melon', name: 'เมลอน', cost: 20, growTime: 20, reward: 60, color: 0x15803d }
+        };
+
+        // --- Game State ---
+        let gameState = 'login'; 
+        let playerName = "";
+        let coins = 50; 
+        let score = 0;
+        let correctAnswers = 0;
+        let inventory = { carrot: 3, tomato: 0, melon: 0 };
+        let activeSeedType = 'carrot';
+        
+        let plots = [];
+        let numPlots = 5; 
+        const maxPlots = 15; 
+        
+        let activePlotForQuiz = null;
+        let isQuizOpen = false;
+
+        // Upgrades
+        let hasRobot = false;
+        let hasDog = false;
+
+        // Entities
+        let robotModel = null;
+        let dogModel = null;
+        let thieves = [];
+
+        // Day/Night
+        let gameTime = 0; 
+
+        // --- Notifications ---
+        function showNotification(text, color = 'bg-gray-800') {
+            const area = document.getElementById('notification-area');
+            const note = document.createElement('div');
+            note.className = `notify-msg ${color}`;
+            note.innerHTML = text;
+            area.appendChild(note);
+            setTimeout(() => { if(note.parentNode) note.remove(); }, 3000);
+        }
+
+        // --- Quiz Data (Science G4: 50 Questions) ---
+        const questions = [
+            { q: "เกณฑ์ใดที่นักวิทยาศาสตร์ใช้ในการจำแนกสิ่งมีชีวิตออกเป็น 3 กลุ่มใหญ่?", opts: ["ขนาดลำตัวและที่อยู่", "การสร้างอาหารและการเคลื่อนที่", "การหายใจและการสืบพันธุ์", "สีและรูปร่าง"], ans: 1 },
+            { q: "กลุ่มสิ่งมีชีวิตใดที่ 'สร้างอาหารเองได้ แต่เคลื่อนที่ไม่ได้'?", opts: ["กลุ่มสัตว์", "กลุ่มไม่ใช่พืชและไม่ใช่สัตว์", "กลุ่มพืช", "กลุ่มจุลินทรีย์"], ans: 2 },
+            { q: "กลุ่มสิ่งมีชีวิตใดที่ 'สร้างอาหารเองไม่ได้ แต่เคลื่อนที่ได้'?", opts: ["กลุ่มพืช", "กลุ่มสัตว์", "กลุ่มเห็ดรา", "กลุ่มไวรัส"], ans: 1 },
+            { q: "สิ่งมีชีวิตกลุ่มใดที่ 'สร้างอาหารเองไม่ได้' และบางชนิดทำหน้าที่ย่อยสลายซากสิ่งมีชีวิต?", opts: ["พืชดอก", "พืชไร้ดอก", "กลุ่มสัตว์", "กลุ่มไม่ใช่พืชและไม่ใช่สัตว์"], ans: 3 },
+            { q: "ข้อใดคือสิ่งมีชีวิตที่อยู่ในกลุ่ม 'ไม่ใช่พืชและไม่ใช่สัตว์' ทั้งหมด?", opts: ["เห็ด, รา, แบคทีเรีย", "มอส, เฟิร์น, สาหร่าย", "ปะการัง, ฟองน้ำ, ดอกจอก", "จอก, แหน, ไวรัส"], ans: 0 },
+            { q: "พืชสร้างอาหารเองได้ผ่านกระบวนการใด?", opts: ["การหายใจ", "การคายน้ำ", "การสังเคราะห์ด้วยแสง", "การดูดซึมแร่ธาตุ"], ans: 2 },
+            { q: "พืชใช้สารสีเขียวใดในการช่วยสร้างอาหาร?", opts: ["คลอรีน", "คลอโรฟิลล์", "แคโรทีนอยด์", "เมลานิน"], ans: 1 },
+            { q: "พืชในข้อใดจัดเป็น 'พืชดอก' ที่สามารถสืบพันธุ์โดยใช้เมล็ด?", opts: ["เฟิร์น", "มอส", "มะม่วง", "ราดำ"], ans: 2 },
+            { q: "พืชในข้อใดจัดเป็น 'พืชไม่มีดอก'?", opts: ["กุหลาบ", "เฟิร์น", "ทานตะวัน", "บัว"], ans: 1 },
+            { q: "พืชใบเลี้ยงเดี่ยว มีลักษณะเส้นใบเป็นแบบใด?", opts: ["เส้นใบเรียงขนานกัน", "เส้นใบเป็นร่างแห", "ไม่มีเส้นใบ", "เส้นใบม้วนงอ"], ans: 0 },
+            { q: "ข้อใดเป็นลักษณะของ 'พืชใบเลี้ยงคู่'?", opts: ["มีระบบรากฝอย", "เส้นใบเป็นร่างแห", "กลีบดอกมี 3 กลีบ", "ลำต้นมีข้อปล้องชัดเจน"], ans: 1 },
+            { q: "ต้นไผ่ ข้าวโพด และหญ้า จัดเป็นพืชกลุ่มใด?", opts: ["พืชใบเลี้ยงคู่", "พืชใบเลี้ยงเดี่ยว", "พืชไร้ดอก", "พืชกินแมลง"], ans: 1 },
+            { q: "มะม่วง มะนาว และถั่วเขียว จัดเป็นพืชกลุ่มใด?", opts: ["พืชใบเลี้ยงคู่", "พืชใบเลี้ยงเดี่ยว", "พืชไร้ราก", "พืชไม่มีดอก"], ans: 0 },
+            { q: "ข้อใดคือลักษณะสำคัญที่ใช้แบ่งสัตว์ออกเป็น 2 กลุ่มใหญ่?", opts: ["การมีปีกหรือไม่มีปีก", "การออกลูกเป็นไข่หรือเป็นตัว", "การมีกระดูกสันหลังหรือไม่มีกระดูกสันหลัง", "การกินพืชหรือกินเนื้อ"], ans: 2 },
+            { q: "สัตว์มีกระดูกสันหลังแบ่งออกได้เป็นกี่ประเภท?", opts: ["3 ประเภท", "4 ประเภท", "5 ประเภท", "6 ประเภท"], ans: 2 },
+            { q: "สัตว์กลุ่มใดที่ 'หายใจด้วยเหงือกตลอดชีวิต' และใช้ครีบในการว่ายน้ำ?", opts: ["กลุ่มนก", "กลุ่มสัตว์เลื้อยคลาน", "กลุ่มปลา", "กลุ่มสัตว์สะเทินน้ำสะเทินบก"], ans: 2 },
+            { q: "ฉลาม และ กระเบน จัดอยู่ในกลุ่มสัตว์ชนิดใด?", opts: ["กลุ่มปลา", "สัตว์เลี้ยงลูกด้วยน้ำนม", "สัตว์เลื้อยคลาน", "สัตว์ไม่มีกระดูกสันหลัง"], ans: 0 },
+            { q: "สัตว์กลุ่มใดที่ตอนเป็นตัวอ่อนหายใจด้วยเหงือกอาศัยในน้ำ แต่โตขึ้นหายใจด้วยปอดอาศัยบนบก?", opts: ["สัตว์เลื้อยคลาน", "สัตว์สะเทินน้ำสะเทินบก", "สัตว์เลี้ยงลูกด้วยน้ำนม", "กลุ่มนก"], ans: 1 },
+            { q: "กบ คางคก และอึ่งอ่าง จัดเป็นสัตว์กลุ่มใด?", opts: ["สัตว์เลื้อยคลาน", "สัตว์สะเทินน้ำสะเทินบก", "สัตว์ปีก", "สัตว์น้ำ"], ans: 1 },
+            { q: "งู เต่า และจระเข้ จัดเป็นสัตว์กลุ่มใด?", opts: ["สัตว์เลื้อยคลาน", "สัตว์สะเทินน้ำสะเทินบก", "สัตว์ปีก", "ปลา"], ans: 0 },
+            { q: "สัตว์เลื้อยคลาน มีลักษณะผิวหนังแบบใด?", opts: ["ผิวหนังเปียกชื้นตลอดเวลา", "มีขนเป็นเส้น", "ผิวหนังแห้ง มีเกล็ดปกคลุม", "มีขนเป็นแผง"], ans: 2 },
+            { q: "สัตว์กลุ่มใดที่มี 'ขนเป็นแผง' (Feather) และมีถุงลมช่วยในการหายใจ?", opts: ["กลุ่มนก", "สัตว์เลี้ยงลูกด้วยน้ำนม", "สัตว์เลื้อยคลาน", "แมลง"], ans: 0 },
+            { q: "เพนกวิน และ นกกระจอกเทศ จัดเป็นสัตว์กลุ่มใด?", opts: ["สัตว์เลี้ยงลูกด้วยน้ำนม", "กลุ่มนก (สัตว์ปีก)", "สัตว์เลื้อยคลาน", "สัตว์สะเทินน้ำสะเทินบก"], ans: 1 },
+            { q: "สัตว์กลุ่มใดที่มี 'ขนเป็นเส้น' (Hair) และเพศเมียมีต่อมสร้างน้ำนม?", opts: ["กลุ่มนก", "สัตว์เลี้ยงลูกด้วยน้ำนม", "สัตว์เลื้อยคลาน", "สัตว์สะเทินน้ำสะเทินบก"], ans: 1 },
+            { q: "วาฬ และ โลมา จัดอยู่ในกลุ่มสัตว์ชนิดใด?", opts: ["กลุ่มปลา", "สัตว์เลื้อยคลาน", "สัตว์เลี้ยงลูกด้วยน้ำนม", "สัตว์สะเทินน้ำสะเทินบก"], ans: 2 },
+            { q: "ค้างคาว บินได้เหมือนนก แต่จัดอยู่ในสัตว์กลุ่มใด?", opts: ["กลุ่มนก", "สัตว์เลื้อยคลาน", "สัตว์เลี้ยงลูกด้วยน้ำนม", "สัตว์สะเทินน้ำสะเทินบก"], ans: 2 },
+            { q: "ตุ่นปากเป็ด เป็นสัตว์เลี้ยงลูกด้วยน้ำนมที่มีลักษณะพิเศษอย่างไร?", opts: ["ไม่มีขน", "หายใจด้วยเหงือก", "ออกลูกเป็นไข่", "บินได้"], ans: 2 },
+            { q: "สัตว์ในข้อใดจัดเป็น 'สัตว์ไม่มีกระดูกสันหลัง' ทั้งหมด?", opts: ["ปลาทู, ปลาหมึก", "กุ้ง, ปู, หอย", "งู, ไส้เดือน", "มด, นก, แมงมุม"], ans: 1 },
+            { q: "ฟองน้ำ และ ปะการัง จัดอยู่ในกลุ่มสิ่งมีชีวิตใด?", opts: ["พืชน้ำ", "สัตว์ไม่มีกระดูกสันหลัง", "สิ่งมีชีวิตกลุ่มไม่ใช่พืชไม่ใช่สัตว์", "สัตว์มีกระดูกสันหลัง"], ans: 1 },
+            { q: "สัตว์ในกลุ่ม 'แมลง' มีขาทั้งหมดกี่ขา?", opts: ["4 ขา (2 คู่)", "6 ขา (3 คู่)", "8 ขา (4 คู่)", "10 ขา (5 คู่)"], ans: 1 },
+            { q: "แมงมุม และ แมงป่อง มีขากี่คู่ จึงไม่จัดเป็นแมลง?", opts: ["2 คู่", "3 คู่", "4 คู่", "5 คู่"], ans: 2 },
+            { q: "สัตว์ในข้อใดไม่มีโครงร่างแข็งทั้งภายนอกและภายในลำตัว?", opts: ["ปู", "ไส้เดือนดิน", "เต่า", "หอย"], ans: 1 },
+            { q: "เห็ดรา มีความสำคัญต่อระบบนิเวศอย่างไร?", opts: ["เป็นผู้ผลิตอาหาร", "เป็นผู้ย่อยสลายซากสิ่งมีชีวิต", "เป็นผู้ล่าสัตว์อื่นๆ", "ช่วยสร้างก๊าซออกซิเจน"], ans: 1 },
+            { q: "เพราะเหตุใด เห็ด จึงไม่สามารถนำมาจัดอยู่ในกลุ่มพืชได้?", opts: ["เพราะเห็ดสืบพันธุ์ด้วยสปอร์", "เพราะเห็ดไม่มีสีเขียว (คลอโรฟิลล์) สร้างอาหารเองไม่ได้", "เพราะเห็ดเคลื่อนที่ได้", "เพราะเห็ดไม่มีรากแก้ว"], ans: 1 },
+            { q: "จุลินทรีย์ชนิดใดที่มนุษย์นำมาใช้ในการทำ 'นมเปรี้ยว' หรือ 'โยเกิร์ต'?", opts: ["ยีสต์", "แบคทีเรีย", "รา", "ไวรัส"], ans: 1 },
+            { q: "สิ่งมีชีวิตในข้อใดที่สามารถมองเห็นได้ด้วย 'กล้องจุลทรรศน์' เท่านั้น?", opts: ["เห็ดฟาง", "ราดำบนขนมปัง", "แบคทีเรีย", "มอส"], ans: 2 },
+            { q: "ไวรัส จัดเป็นสิ่งมีชีวิตกลุ่มใด?", opts: ["กลุ่มพืช", "กลุ่มสัตว์", "กลุ่มไม่ใช่พืชและไม่ใช่สัตว์", "กลุ่มเห็ด"], ans: 2 },
+            { q: "ระบบรากของ 'พืชใบเลี้ยงคู่' ส่วนใหญ่เป็นแบบใด?", opts: ["ระบบรากฝอย", "ระบบรากแก้ว", "ไม่มีราก", "รากอากาศ"], ans: 1 },
+            { q: "ดอกไม้ที่มีจำนวนกลีบดอก 3 หรือทวีคูณของ 3 (เช่น 3, 6) มักจะเป็นพืชกลุ่มใด?", opts: ["พืชไม่มีดอก", "พืชใบเลี้ยงคู่", "พืชใบเลี้ยงเดี่ยว", "พืชกินแมลง"], ans: 2 },
+            { q: "สัตว์กลุ่มใดที่มีการลอกคราบในขณะเจริญเติบโต?", opts: ["สัตว์เลื้อยคลาน และ สัตว์มีข้อปล้อง (เช่น แมลง กุ้ง)", "สัตว์เลี้ยงลูกด้วยน้ำนม", "สัตว์ปีก", "ปลา"], ans: 0 },
+            { q: "ฉลามวาฬ จัดอยู่ในกลุ่มสิ่งมีชีวิตใด?", opts: ["สัตว์เลี้ยงลูกด้วยน้ำนม", "สัตว์เลื้อยคลาน", "กลุ่มปลา", "กลุ่มไม่ใช่พืชไม่ใช่สัตว์"], ans: 2 },
+            { q: "ตัวอ่อนของกบ เรียกว่าอะไร และหายใจด้วยอะไร?", opts: ["ลูกอ๊อด หายใจด้วยเหงือก", "ลูกอ๊อด หายใจด้วยปอด", "ลูกกบ หายใจด้วยผิวหนัง", "ลูกเขียด หายใจด้วยปอด"], ans: 0 },
+            { q: "การที่นกมีกระดูกที่มีลักษณะกลวงและเบา มีประโยชน์อย่างไร?", opts: ["ช่วยในการว่ายน้ำ", "ช่วยกักเก็บอาหาร", "ทำให้ตัวเบาและบินได้ง่ายขึ้น", "ช่วยรักษาอุณหภูมิร่างกาย"], ans: 2 },
+            { q: "สัตว์กลุ่มใดเป็นสัตว์เลือดอุ่น (อุณหภูมิร่างกายคงที่)?", opts: ["ปลา และ สัตว์สะเทินน้ำสะเทินบก", "นก และ สัตว์เลี้ยงลูกด้วยน้ำนม", "สัตว์เลื้อยคลาน และ ปลา", "สัตว์ไม่มีกระดูกสันหลัง"], ans: 1 },
+            { q: "จิงโจ้ และ โคอาลา มีลักษณะเด่นอย่างไรในกลุ่มสัตว์เลี้ยงลูกด้วยน้ำนม?", opts: ["มีถุงหน้าท้องสำหรับเลี้ยงลูกอ่อน", "ออกลูกเป็นไข่", "บินได้คล้ายนก", "อาศัยอยู่ในน้ำตลอดเวลา"], ans: 0 },
+            { q: "ข้อใดคือประโยชน์ของ 'รา' บางชนิด?", opts: ["ใช้ทำขนมปัง", "ใช้ผลิตยาปฏิชีวนะ (เช่น เพนิซิลลิน)", "ใช้ย่อยสลายพลาสติก", "ใช้แทนปุ๋ยเคมีได้ทันที"], ans: 1 },
+            { q: "ถ้าพบสิ่งมีชีวิตชนิดหนึ่ง มีลักษณะ: มีเกล็ด, ออกลูกเป็นไข่, หายใจด้วยปอด น่าจะเป็นสัตว์กลุ่มใด?", opts: ["ปลา", "สัตว์สะเทินน้ำสะเทินบก", "สัตว์เลื้อยคลาน", "สัตว์เลี้ยงลูกด้วยน้ำนม"], ans: 2 },
+            { q: "ดาวทะเล (ปลาดาว) เป็นปลาหรือไม่ เพราะเหตุใด?", opts: ["เป็นปลา เพราะอาศัยอยู่ในทะเล", "เป็นปลา เพราะมีเหงือก", "ไม่เป็นปลา เพราะไม่มีกระดูกสันหลังและไม่มีครีบ", "ไม่เป็นปลา เพราะเลี้ยงลูกด้วยน้ำนม"], ans: 2 },
+            { q: "สิ่งมีชีวิตใดช่วยย่อยสลายซากพืชซากสัตว์ให้กลายเป็นแร่ธาตุกลับคืนสู่ดิน?", opts: ["พืชสีเขียว", "เห็ด รา และแบคทีเรีย", "สัตว์กินเนื้อ", "สัตว์กินพืช"], ans: 1 },
+            { q: "ข้อใดเป็นการจำแนกกลุ่มสิ่งมีชีวิตที่ถูกต้องที่สุด?", opts: ["พืช สร้างอาหารเองได้ / สัตว์ เคลื่อนที่ไม่ได้", "พืช เคลื่อนที่ได้ / สัตว์ สร้างอาหารเองได้", "เห็ดรา สร้างอาหารเองได้ / พืช สร้างอาหารไม่ได้", "พืช สร้างอาหารเองได้ / สัตว์ สร้างอาหารเองไม่ได้แต่เคลื่อนที่ได้"], ans: 3 }
+        ];
+
+        // --- Game Management ---
+        function startGame() {
+            const nameInput = document.getElementById('player-name-input').value.trim();
+            playerName = nameInput !== "" ? nameInput : "ชาวสวน";
+            document.getElementById('player-name-display').innerText = playerName;
+            
+            document.getElementById('login-modal').classList.add('hidden');
+            document.getElementById('game-ui').classList.remove('hidden');
+            document.getElementById('pc-hint').classList.remove('hidden');
+            
+            gameState = 'playing';
+            updateUI();
+        }
+
+        function restartGame() {
+            coins = 50;
+            score = 0;
+            correctAnswers = 0;
+            inventory = { carrot: 3, tomato: 0, melon: 0 };
+            numPlots = 5;
+            hasRobot = false;
+            hasDog = false;
+            thieves.forEach(t => scene.remove(t.model));
+            thieves = [];
+            if(robotModel) { scene.remove(robotModel); robotModel = null; }
+            if(dogModel) { scene.remove(dogModel); dogModel = null; }
+            
+            document.getElementById('btn-buy-robot').disabled = false;
+            document.getElementById('btn-buy-robot').innerText = "หุ่นยนต์ -100฿";
+            document.getElementById('btn-buy-robot').classList.replace('bg-gray-500', 'bg-blue-500');
+            
+            document.getElementById('btn-buy-dog').disabled = false;
+            document.getElementById('btn-buy-dog').innerText = "สุนัข -150฿";
+            document.getElementById('btn-buy-dog').classList.replace('bg-gray-500', 'bg-amber-600');
+
+            document.getElementById('gameover-modal').classList.add('hidden');
+            gameState = 'playing';
+            initFarm(); 
+            updateUI();
+        }
+
+        function checkBankruptcy() {
+            if (gameState !== 'playing') return;
+            
+            let activePlants = plots.filter(p => p.state > 0).length;
+            let totalSeeds = inventory.carrot + inventory.tomato + inventory.melon;
+            let minCost = Math.min(SEEDS.carrot.cost, SEEDS.tomato.cost, SEEDS.melon.cost);
+
+            if (coins < minCost && totalSeeds === 0 && activePlants === 0) {
+                gameState = 'gameover';
+                document.getElementById('go-name').innerText = playerName;
+                document.getElementById('go-score').innerText = score;
+                document.getElementById('go-correct').innerText = correctAnswers + " ข้อ";
+                document.getElementById('gameover-modal').classList.remove('hidden');
+                document.getElementById('game-ui').classList.add('hidden');
+            }
+        }
+
+        // --- Three.js Setup ---
+        const container = document.getElementById('game-container');
+        const scene = new THREE.Scene();
+        
+        // Colors for Day/Night
+        const skyColors = { day: 0x87CEEB, sunset: 0xfd5e53, night: 0x0a0a2a, sunrise: 0xffa07a };
+        scene.background = new THREE.Color(skyColors.day); 
+        scene.fog = new THREE.Fog(skyColors.day, 20, 60);
+
+        const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 5;
+        controls.maxDistance = 35;
+        controls.maxPolarAngle = Math.PI / 2 - 0.1;
+        controls.enablePan = false; 
+        controls.enableRotate = true; // Add this line to explicitly allow rotation
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.left = -25;
+        dirLight.shadow.camera.right = 25;
+        dirLight.shadow.camera.top = 25;
+        dirLight.shadow.camera.bottom = -25;
+        scene.add(dirLight);
+
+        // Environment
+        const waterGeo = new THREE.PlaneGeometry(250, 250);
+        const waterMat = new THREE.MeshStandardMaterial({ color: 0x4dabf7, flatShading: true });
+        const water = new THREE.Mesh(waterGeo, waterMat);
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = -0.5;
+        water.receiveShadow = true;
+        scene.add(water);
+
+        // Island (Larger for 15 plots)
+        const islandRadius = 22;
+        const islandGeo = new THREE.CylinderGeometry(islandRadius, islandRadius-1, 1, 40);
+        const islandMat = new THREE.MeshStandardMaterial({ color: 0x84cc16, flatShading: true });
+        const island = new THREE.Mesh(islandGeo, islandMat);
+        island.receiveShadow = true;
+        scene.add(island);
+
+        // Decor
+        function createHouse() {
+            const group = new THREE.Group();
+            const base = new THREE.Mesh(new THREE.BoxGeometry(5, 4, 5), new THREE.MeshStandardMaterial({ color: 0xe5e7eb }));
+            base.position.y = 2; base.castShadow = true; base.receiveShadow = true;
+            group.add(base);
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(4.5, 3, 4), new THREE.MeshStandardMaterial({ color: 0xf97316, flatShading: true }));
+            roof.position.y = 5.5; roof.rotation.y = Math.PI / 4; roof.castShadow = true;
+            group.add(roof);
+            // Move far back
+            group.position.set(-6, 0.5, -12);
+            scene.add(group);
+        }
+        createHouse();
+
+        function createTree(x, z) {
+            const tree = new THREE.Group();
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 2, 8), new THREE.MeshStandardMaterial({ color: 0x8b4513 }));
+            trunk.position.y = 1; trunk.castShadow = true;
+            tree.add(trunk);
+            const leaves = new THREE.Mesh(new THREE.ConeGeometry(2.2, 4, 6), new THREE.MeshStandardMaterial({ color: 0x22c55e, flatShading: true }));
+            leaves.position.y = 4; leaves.castShadow = true;
+            tree.add(leaves);
+            tree.position.set(x, 0.5, z);
+            scene.add(tree);
+        }
+        createTree(-15, -5); createTree(-12, -15); createTree(12, -10); createTree(15, 5); createTree(-14, 10);
+
+        // --- Realistic Plant Models ---
+        function createPlantModel(type) {
+            const group = new THREE.Group();
+            if (type === 'carrot') {
+                const root = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.8, 6), new THREE.MeshStandardMaterial({ color: 0xf97316, flatShading:true }));
+                root.rotation.x = Math.PI; root.position.y = -0.2; root.castShadow = true;
+                const leaves = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.6, 5), new THREE.MeshStandardMaterial({ color: 0x22c55e, flatShading:true }));
+                leaves.position.y = 0.5; leaves.castShadow = true;
+                group.add(root); group.add(leaves);
+            } else if (type === 'tomato') {
+                const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.2), new THREE.MeshStandardMaterial({ color: 0x15803d }));
+                stalk.position.y = 0.6; stalk.castShadow = true; group.add(stalk);
+                const leafGroup = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0x22c55e }));
+                leafGroup.position.y = 0.8; leafGroup.castShadow = true; group.add(leafGroup);
+                for(let i=0; i<4; i++) {
+                    const tomato = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8,8), new THREE.MeshStandardMaterial({color:0xef4444}));
+                    tomato.position.set(Math.random()*0.6-0.3, Math.random()*0.6+0.4, Math.random()*0.6-0.3);
+                    tomato.castShadow = true;
+                    group.add(tomato);
+                }
+            } else if (type === 'melon') {
+                const melon = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), new THREE.MeshStandardMaterial({ color: 0x15803d, flatShading:true }));
+                melon.position.y = 0.4; melon.scale.z = 1.2; melon.castShadow = true;
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4), new THREE.MeshStandardMaterial({ color: 0x4ade80 }));
+                stem.position.set(0, 0.6, 0.5); stem.rotation.x = Math.PI/4;
+                group.add(melon); group.add(stem);
+            }
+            return group;
+        }
+
+        // --- Helpers Models ---
+        function spawnRobot() {
+            if(robotModel) return;
+            hasRobot = true;
+            robotModel = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0x9ca3af }));
+            body.position.y = 1; body.castShadow = true; robotModel.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.6), new THREE.MeshStandardMaterial({ color: 0x60a5fa }));
+            head.position.y = 1.7; head.castShadow = true; robotModel.add(head);
+            const eye = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.15), new THREE.MeshBasicMaterial({ color: 0xffea00 }));
+            eye.position.set(0, 1.7, 0.31); robotModel.add(eye);
+            
+            robotModel.position.set(5, 0.5, 0); 
+            scene.add(robotModel);
+            
+            robotModel.userData = { timer: 0, target: null };
+            showNotification("🤖 หุ่นยนต์พร้อมทำงานปลูกผัก, เก็บเกี่ยว และไล่แมลงแล้ว!");
+        }
+
+        function spawnDog() {
+            if(dogModel) return;
+            hasDog = true;
+            dogModel = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.8), new THREE.MeshStandardMaterial({ color: 0xd97706 }));
+            body.position.y = 0.4; body.castShadow = true; dogModel.add(body);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: 0xd97706 }));
+            head.position.set(0, 0.7, 0.5); head.castShadow = true; dogModel.add(head);
+            
+            dogModel.position.set(8, 0.5, 2);
+            scene.add(dogModel);
+            
+            dogModel.userData = { target: null, walkCycle: 0 };
+            showNotification("🐕 สุนัขเฝ้าฟาร์มพร้อมวิ่งไล่โจร!");
+        }
+
+        // --- Remove the duplicate spawnDog function ---
+
+        // --- Thief Logic ---
+        function createThiefModel() {
+            const group = new THREE.Group();
+            const matDark = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), matDark);
+            head.position.y = 1.7; head.castShadow = true; group.add(head);
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 0.4), matDark);
+            body.position.y = 0.95; body.castShadow = true; group.add(body);
+            
+            // Mask eyes
+            const eye1 = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            eye1.position.set(0.15, 1.8, 0.31); group.add(eye1);
+            const eye2 = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            eye2.position.set(-0.15, 1.8, 0.31); group.add(eye2);
+
+            return group;
+        }
+
+        function spawnThief() {
+            if (thieves.length >= 2) return; 
+            const tModel = createThiefModel();
+            
+            const angle = Math.random() * Math.PI * 2;
+            tModel.position.set(Math.cos(angle) * (islandRadius-1), 0.5, Math.sin(angle) * (islandRadius-1));
+            scene.add(tModel);
+            
+            thieves.push({
+                model: tModel,
+                targetPlot: null,
+                state: 'seeking',
+                timer: 0
+            });
+            showNotification("⚠️ ระวัง! มีโจรบุกฟาร์ม!", "bg-red-600");
+        }
+
+
+        // --- Player ---
+        let player, rightLeg, leftLeg, rightArm, leftArm;
+        function createPlayer() {
+            const pGroup = new THREE.Group();
+            const matSkin = new THREE.MeshStandardMaterial({ color: 0xfcd34d });
+            const matShirt = new THREE.MeshStandardMaterial({ color: 0x3b82f6 });
+            const matPants = new THREE.MeshStandardMaterial({ color: 0x1e3a8a });
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), matSkin); head.position.y = 1.7; head.castShadow = true; pGroup.add(head);
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 0.4), matShirt); body.position.y = 0.95; body.castShadow = true; pGroup.add(body);
+
+            rightArm = new THREE.Group(); rightArm.position.set(0.55, 1.4, 0);
+            const rArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, 0.3), matSkin); rArmMesh.position.y = -0.3; rArmMesh.castShadow = true; rightArm.add(rArmMesh); pGroup.add(rightArm);
+            leftArm = new THREE.Group(); leftArm.position.set(-0.55, 1.4, 0);
+            const lArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, 0.3), matSkin); lArmMesh.position.y = -0.3; lArmMesh.castShadow = true; leftArm.add(lArmMesh); pGroup.add(leftArm);
+            
+            rightLeg = new THREE.Group(); rightLeg.position.set(0.2, 0.5, 0);
+            const rLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.7, 0.35), matPants); rLegMesh.position.y = -0.35; rLegMesh.castShadow = true; rightLeg.add(rLegMesh); pGroup.add(rightLeg);
+            leftLeg = new THREE.Group(); leftLeg.position.set(-0.2, 0.5, 0);
+            const lLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.7, 0.35), matPants); lLegMesh.position.y = -0.35; lLegMesh.castShadow = true; leftLeg.add(lLegMesh); pGroup.add(leftLeg);
+
+            pGroup.position.set(0, 0.5, 12); 
+            scene.add(pGroup);
+            return pGroup;
+        }
+        player = createPlayer();
+
+        const cameraOffset = new THREE.Vector3(0, 12, 16);
+        camera.position.copy(player.position).add(cameraOffset);
+        let previousPlayerPos = player.position.clone();
+
+        // --- Input & Controls ---
+        const keys = { w: false, a: false, s: false, d: false, space: false };
+        let actionTriggered = false;
+
+        window.addEventListener('keydown', (e) => {
+            if(gameState !== 'playing') return;
+            const key = e.key.toLowerCase();
+            if (key === 'w' || key === 'arrowup') keys.w = true;
+            if (key === 'a' || key === 'arrowleft') keys.a = true;
+            if (key === 's' || key === 'arrowdown') keys.s = true;
+            if (key === 'd' || key === 'arrowright') keys.d = true;
+            if (key === ' ') { if (!keys.space && !isQuizOpen) actionTriggered = true; keys.space = true; }
+        });
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w' || key === 'arrowup') keys.w = false;
+            if (key === 'a' || key === 'arrowleft') keys.a = false;
+            if (key === 's' || key === 'arrowdown') keys.s = false;
+            if (key === 'd' || key === 'arrowright') keys.d = false;
+            if (key === ' ') keys.space = false;
+        });
+
+        // Mobile Joystick
+        const stick = document.getElementById('joystick-stick');
+        const zone = document.getElementById('joystick-zone');
+        let joyActive = false;
+        let joyVector = { x: 0, y: 0 };
+        
+        function handleTouchMove(e) {
+            if(gameState !== 'playing') return;
+            e.preventDefault(); 
+            if(!joyActive) return;
+            const touch = Array.from(e.touches).find(t => t.target === zone || t.target === stick || joyActive);
+            if(!touch) return;
+
+            const rect = zone.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            let dx = touch.clientX - centerX;
+            let dy = touch.clientY - centerY;
+            const maxRadius = rect.width / 2;
+            const distance = Math.sqrt(dx*dx + dy*dy);
+            
+            if(distance > maxRadius) { dx = (dx / distance) * maxRadius; dy = (dy / distance) * maxRadius; }
+            stick.style.transform = `translate(${dx}px, ${dy}px)`;
+            joyVector.x = dx / maxRadius; joyVector.y = dy / maxRadius;
+        }
+
+        zone.addEventListener('touchstart', (e) => { joyActive = true; handleTouchMove(e); }, {passive: false});
+        window.addEventListener('touchmove', handleTouchMove, {passive: false});
+        window.addEventListener('touchend', (e) => { joyActive = false; joyVector = { x: 0, y: 0 }; stick.style.transform = `translate(0px, 0px)`; });
+
+        document.getElementById('action-btn').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if(gameState === 'playing' && !isQuizOpen) actionTriggered = true;
+        });
+
+
+        // --- Farming System ---
+        const htmlLayer = document.getElementById('html-layer');
+        
+        function initFarm() {
+            plots.forEach(p => {
+                scene.remove(p.mesh);
+                if(p.plantModel) scene.remove(p.plantModel);
+                if(p.bugModel) scene.remove(p.bugModel);
+                if(p.barEl) p.barEl.remove();
+                if(p.textEl) p.textEl.remove();
+            });
+            plots = [];
+
+            // 5 cols x 3 rows grid
+            const cols = 5;
+            const rows = 3;
+            const gap = 2.4;
+            const startX = - (cols-1) * gap / 2; 
+            const startZ = -1.5; 
+            
+            let count = 0;
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    if (count >= numPlots) return; 
+                    
+                    const plotGeo = new THREE.BoxGeometry(2.2, 0.2, 2.2);
+                    const plotMat = new THREE.MeshStandardMaterial({ color: 0x5c4033 }); 
+                    const plotMesh = new THREE.Mesh(plotGeo, plotMat);
+                    plotMesh.position.set(startX + (col * gap), 0.6, startZ + (row * gap));
+                    plotMesh.receiveShadow = true;
+                    scene.add(plotMesh);
+
+                    const barContainer = document.createElement('div');
+                    barContainer.className = 'progress-bar-container';
+                    const barFill = document.createElement('div');
+                    barFill.className = 'progress-bar-fill';
+                    barContainer.appendChild(barFill);
+                    htmlLayer.appendChild(barContainer);
+
+                    const textEl = document.createElement('div');
+                    textEl.className = 'floating-text text-yellow-400';
+                    htmlLayer.appendChild(textEl);
+
+                    plots.push({
+                        mesh: plotMesh,
+                        state: 0, 
+                        progress: 0,
+                        seedType: null,
+                        hasBug: false,
+                        plantModel: null,
+                        bugModel: null,
+                        barEl: barContainer,
+                        fillEl: barFill,
+                        textEl: textEl,
+                        worldPos: new THREE.Vector3(plotMesh.position.x, 2.0, plotMesh.position.z)
+                    });
+                    count++;
+                }
+            }
+            updateUI();
+        }
+        initFarm();
+
+        function createBugModel() {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshStandardMaterial({ color: 0x000000 }));
+            head.position.set(0.15, 0.1, 0);
+            group.add(body); group.add(head);
+            group.castShadow = true;
+            return group;
+        }
+
+        // --- Quiz System ---
+        function triggerQuiz(plot) {
+            isQuizOpen = true;
+            activePlotForQuiz = plot;
+            const qObj = questions[Math.floor(Math.random() * questions.length)];
+            
+            document.getElementById('quiz-question').innerText = qObj.q;
+            const optionsContainer = document.getElementById('quiz-options');
+            optionsContainer.innerHTML = '';
+            document.getElementById('quiz-feedback').classList.add('hidden');
+
+            qObj.opts.forEach((opt, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'w-full text-left p-3 border-2 border-gray-200 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition text-sm md:text-base';
+                btn.innerText = opt;
+                btn.onclick = () => checkAnswer(index, qObj.ans, btn);
+                optionsContainer.appendChild(btn);
+            });
+
+            document.getElementById('quiz-modal').classList.remove('hidden');
+        }
+
+        function checkAnswer(selectedIndex, correctIndex, btnElement) {
+            const feedback = document.getElementById('quiz-feedback');
+            feedback.classList.remove('hidden');
+            const allBtns = document.getElementById('quiz-options').querySelectorAll('button');
+            allBtns.forEach(b => b.disabled = true);
+            
+            if (selectedIndex === correctIndex) {
+                btnElement.classList.replace('border-gray-200', 'border-green-500');
+                btnElement.classList.add('bg-green-100', 'text-green-800');
+                feedback.innerText = "ถูกต้อง! รับผลผลิตและกำไร";
+                feedback.className = "mt-4 text-center font-bold text-lg text-green-600";
+                
+                setTimeout(() => {
+                    correctAnswers++;
+                    harvestPlant(activePlotForQuiz); // Apply reward on correct answer
+                    closeQuiz();
+                }, 1500);
+            } else {
+                btnElement.classList.add('border-red-500', 'bg-red-50', 'text-red-700', 'shake');
+                feedback.innerText = "ผิดครับ! ต้นไม้ตาย 😭";
+                feedback.className = "mt-4 text-center font-bold text-lg text-red-500";
+                allBtns[correctIndex].classList.replace('border-gray-200', 'border-green-500');
+                allBtns[correctIndex].classList.add('bg-green-50');
+
+                setTimeout(() => {
+                    resetPlot(activePlotForQuiz); // Plant dies, no reward
+                    closeQuiz();
+                    checkBankruptcy();
+                }, 2000);
+            }
+        }
+
+        function closeQuiz() {
+            document.getElementById('quiz-modal').classList.add('hidden');
+            isQuizOpen = false;
+            activePlotForQuiz = null;
+        }
+
+        function resetPlot(plot) {
+            plot.state = 0;
+            plot.progress = 0;
+            plot.hasBug = false;
+            if(plot.plantModel) { scene.remove(plot.plantModel); plot.plantModel = null; }
+            if(plot.bugModel) { scene.remove(plot.bugModel); plot.bugModel = null; }
+            plot.barEl.style.display = 'none';
+            plot.textEl.style.display = 'none';
+        }
+
+
+        // --- UI & Shop Logic ---
+        function selectSeed(type) {
+            activeSeedType = type;
+            document.querySelectorAll('.seed-select-btn').forEach(btn => {
+                btn.classList.remove('active', 'border-blue-500', 'bg-blue-50');
+            });
+            const activeBtn = document.getElementById(`sel-${type}`);
+            activeBtn.classList.add('active', 'border-blue-500', 'bg-blue-50');
+        }
+
+        function updateUI() {
+            document.getElementById('coin-display').innerText = coins;
+            document.getElementById('score-display').innerText = score;
+            document.getElementById('inv-carrot').innerText = inventory.carrot;
+            document.getElementById('inv-tomato').innerText = inventory.tomato;
+            document.getElementById('inv-melon').innerText = inventory.melon;
+            
+            const btnPlot = document.getElementById('btn-buy-plot');
+            if (numPlots >= maxPlots) {
+                btnPlot.querySelector('span:first-child').innerText = "ที่ดินเต็มแล้ว";
+                btnPlot.querySelector('span:last-child').innerText = "";
+                btnPlot.disabled = true;
+                btnPlot.classList.replace('bg-purple-500', 'bg-gray-400');
+                btnPlot.classList.remove('hover:bg-purple-600');
+            }
+            checkBankruptcy();
+        }
+
+        window.buySeed = function(type) {
+            const cost = SEEDS[type].cost;
+            if (coins >= cost) {
+                coins -= cost; inventory[type]++;
+                selectSeed(type); updateUI();
+            }
+        }
+
+        window.buyPlot = function() {
+            if (coins >= 20 && numPlots < maxPlots) {
+                coins -= 20; numPlots++;
+                initFarm(); 
+            }
+        }
+
+        window.buyRobot = function() {
+            if (coins >= 100 && !hasRobot) {
+                coins -= 100;
+                spawnRobot();
+                updateUI();
+                const btn = document.getElementById('btn-buy-robot');
+                btn.disabled = true;
+                btn.classList.replace('bg-blue-500', 'bg-gray-500');
+                btn.classList.remove('hover:bg-blue-600');
+                btn.innerText = "มีหุ่นยนต์แล้ว";
+            }
+        }
+
+        window.buyDog = function() {
+            if (coins >= 150 && !hasDog) {
+                coins -= 150;
+                spawnDog();
+                updateUI();
+                const btn = document.getElementById('btn-buy-dog');
+                btn.disabled = true;
+                btn.classList.replace('bg-amber-600', 'bg-gray-500');
+                btn.classList.remove('hover:bg-amber-700');
+                btn.innerText = "มีสุนัขแล้ว";
+            }
+        }
+
+        // --- Main Game Loop ---
+        const clock = new THREE.Clock();
+        let walkCycle = 0;
+        let highlightedTarget = null; 
+
+        function lerpColor(c1, c2, t) {
+            const r = c1.r + (c2.r - c1.r) * t;
+            const g = c1.g + (c2.g - c1.g) * t;
+            const b = c1.b + (c2.b - c1.b) * t;
+            return new THREE.Color(r, g, b);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1); 
+
+            if (gameState === 'playing') {
+                // --- Day / Night Cycle (60s) ---
+                gameTime = (gameTime + delta) % 60;
+                const timeRatio = gameTime / 60;
+                
+                let targetColor, label, icon;
+                if (timeRatio < 0.4) { targetColor = new THREE.Color(skyColors.day); label="กลางวัน"; icon="fa-sun text-yellow-500"; dirLight.intensity = 0.8; }
+                else if (timeRatio < 0.5) { 
+                    const t = (timeRatio - 0.4) / 0.1;
+                    targetColor = lerpColor(new THREE.Color(skyColors.day), new THREE.Color(skyColors.sunset), t);
+                    label="เย็น"; icon="fa-cloud-sun text-orange-500";
+                    dirLight.intensity = 0.8 - (t*0.4);
+                }
+                else if (timeRatio < 0.9) { targetColor = new THREE.Color(skyColors.night); label="กลางคืน"; icon="fa-moon text-blue-300"; dirLight.intensity = 0.2; }
+                else {
+                    const t = (timeRatio - 0.9) / 0.1;
+                    targetColor = lerpColor(new THREE.Color(skyColors.night), new THREE.Color(skyColors.sunrise), t);
+                    label="เช้ามืด"; icon="fa-sun text-pink-400";
+                    dirLight.intensity = 0.2 + (t*0.6);
+                }
+                
+                scene.background.lerp(targetColor, 0.1);
+                scene.fog.color.copy(scene.background);
+                
+                const timeEl = document.getElementById('time-display');
+                if(timeEl.innerText.indexOf(label) === -1) {
+                    timeEl.innerHTML = `<i class="fas ${icon}"></i> ${label}`;
+                }
+
+                // Random Thief Spawning
+                const spawnChance = (timeRatio > 0.5 && timeRatio < 0.9) ? 0.05 : 0.005;
+                if (Math.random() < delta * spawnChance) {
+                    spawnThief();
+                }
+
+                if (!isQuizOpen) {
+                    // 1. Player Movement
+                    let moveX = 0, moveZ = 0, isMoving = false;
+                    if (keys.w) moveZ -= 1; if (keys.s) moveZ += 1;
+                    if (keys.a) moveX -= 1; if (keys.d) moveX += 1;
+                    if (joyActive) { moveX = joyVector.x; moveZ = joyVector.y; }
+
+                    const moveVec = new THREE.Vector3(moveX, 0, moveZ);
+                    if (moveVec.lengthSq() > 0) {
+                        isMoving = true;
+                        const cameraAngle = Math.atan2(camera.position.x - player.position.x, camera.position.z - player.position.z);
+                        moveVec.applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraAngle);
+                        moveVec.normalize();
+
+                        const speed = 7 * delta;
+                        player.position.addScaledVector(moveVec, speed);
+
+                        const targetAngle = Math.atan2(moveVec.x, moveVec.z);
+                        const diff = targetAngle - player.rotation.y;
+                        const normalizedDiff = Math.atan2(Math.sin(diff), Math.cos(diff));
+                        player.rotation.y += normalizedDiff * 10 * delta;
+
+                        walkCycle += delta * 15;
+                        const swing = Math.sin(walkCycle) * 0.5;
+                        rightLeg.rotation.x = swing; leftLeg.rotation.x = -swing;
+                        rightArm.rotation.x = -swing; leftArm.rotation.x = swing;
+                    } else {
+                        rightLeg.rotation.x = THREE.MathUtils.lerp(rightLeg.rotation.x, 0, 0.1);
+                        leftLeg.rotation.x = THREE.MathUtils.lerp(leftLeg.rotation.x, 0, 0.1);
+                        rightArm.rotation.x = THREE.MathUtils.lerp(rightArm.rotation.x, 0, 0.1);
+                        leftArm.rotation.x = THREE.MathUtils.lerp(leftArm.rotation.x, 0, 0.1);
+                    }
+
+                    // Boundaries 
+                    const distFromCenter = Math.sqrt(player.position.x**2 + player.position.z**2);
+                    if (distFromCenter > islandRadius - 1) {
+                        const angle = Math.atan2(player.position.x, player.position.z);
+                        player.position.x = Math.sin(angle) * (islandRadius - 1);
+                        player.position.z = Math.cos(angle) * (islandRadius - 1);
+                    }
+
+                    // 2. Proximity Checking
+                    let closestDist = 3.0; 
+                    highlightedTarget = null;
+                    
+                    plots.forEach(plot => {
+                        plot.mesh.material.emissive.setHex(0x000000); 
+                        const dist = player.position.distanceTo(plot.mesh.position);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            highlightedTarget = { type: 'plot', obj: plot };
+                        }
+                    });
+
+                    thieves.forEach(thief => {
+                        thief.model.children.forEach(c => { if(c.material.emissive) c.material.emissive.setHex(0x000000); });
+                        const dist = player.position.distanceTo(thief.model.position);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            highlightedTarget = { type: 'thief', obj: thief };
+                        }
+                    });
+
+                    // Highlight and Action
+                    if (highlightedTarget) {
+                        if (highlightedTarget.type === 'plot') {
+                            const plot = highlightedTarget.obj;
+                            if(plot.hasBug) plot.mesh.material.emissive.setHex(0x550000); 
+                            else plot.mesh.material.emissive.setHex(0x335500); 
+                            
+                            if (actionTriggered) handlePlotAction(plot);
+                        } else if (highlightedTarget.type === 'thief') {
+                            const thief = highlightedTarget.obj;
+                            thief.model.children.forEach(c => { if(c.material.emissive) c.material.emissive.setHex(0x550000); });
+                            if (actionTriggered) chaseThief(thief);
+                        }
+                    }
+                    actionTriggered = false; 
+                }
+
+                // --- 3. Farming Logic & Pests ---
+                plots.forEach(plot => {
+                    const vector = plot.worldPos.clone().project(camera);
+                    const x = (vector.x * .5 + .5) * window.innerWidth;
+                    const y = (vector.y * -.5 + .5) * window.innerHeight;
+                    const isVisible = vector.z < 1;
+
+                    if (plot.state === 1) { 
+                        if(isVisible) {
+                            plot.barEl.style.display = 'block'; plot.barEl.style.left = `${x}px`; plot.barEl.style.top = `${y}px`;
+                            plot.fillEl.style.width = `${plot.progress}%`;
+                        } else { plot.barEl.style.display = 'none'; }
+
+                        if (!plot.hasBug) {
+                            plot.fillEl.classList.remove('bugged');
+                            plot.textEl.style.display = 'none';
+                            
+                            plot.progress += (100 / SEEDS[plot.seedType].growTime) * delta;
+                            
+                            if (Math.random() < delta * 0.05) { 
+                                plot.hasBug = true;
+                                plot.bugModel = createBugModel();
+                                plot.bugModel.position.copy(plot.mesh.position);
+                                plot.bugModel.position.y += 0.8;
+                                scene.add(plot.bugModel);
+                            }
+
+                            if (plot.plantModel) {
+                                const scale = 0.2 + (plot.progress / 100) * 0.8;
+                                plot.plantModel.scale.set(scale, scale, scale);
+                            }
+
+                            if (plot.progress >= 100) {
+                                plot.state = 2; 
+                                plot.barEl.style.display = 'none';
+                            }
+                        } else {
+                            plot.fillEl.classList.add('bugged');
+                            if(isVisible) {
+                                plot.textEl.style.display = 'block';
+                                plot.textEl.innerHTML = '<i class="fas fa-bug text-red-500"></i>';
+                                plot.textEl.style.left = `${x}px`;
+                                plot.textEl.style.top = `${y-20}px`;
+                            } else { plot.textEl.style.display = 'none'; }
+                            
+                            // Plant dies slowly if bug is not removed
+                            plot.progress -= 5 * delta;
+                            if (plot.progress <= 0) {
+                                resetPlot(plot);
+                                showNotification("ต้นไม้ตายเพราะแมลง!", "bg-red-500");
+                                checkBankruptcy();
+                            }
+                        }
+                    } else if (plot.state === 2) { 
+                        if(isVisible) {
+                            plot.textEl.style.display = 'block';
+                            plot.textEl.innerHTML = '✨';
+                            plot.textEl.style.left = `${x}px`;
+                            plot.textEl.style.top = `${y-20}px`;
+                        } else { plot.textEl.style.display = 'none'; }
+                    } else {
+                        plot.barEl.style.display = 'none';
+                        plot.textEl.style.display = 'none';
+                    }
+                });
+
+                // --- 4. Thieves Logic ---
+                for (let i = thieves.length - 1; i >= 0; i--) {
+                    const thief = thieves[i];
+                    
+                    if (thief.state === 'seeking') {
+                        // Find a ready plot
+                        if (!thief.targetPlot || thief.targetPlot.state !== 2) {
+                            const readyPlots = plots.filter(p => p.state === 2);
+                            if (readyPlots.length > 0) {
+                                thief.targetPlot = readyPlots[Math.floor(Math.random() * readyPlots.length)];
+                            }
+                        }
+                        
+                        if (thief.targetPlot) {
+                            // Move to target
+                            const dir = thief.targetPlot.mesh.position.clone().sub(thief.model.position);
+                            dir.y = 0;
+                            if (dir.length() > 0.5) {
+                                dir.normalize();
+                                thief.model.position.addScaledVector(dir, 4 * delta);
+                                thief.model.rotation.y = Math.atan2(dir.x, dir.z);
+                            } else {
+                                thief.state = 'stealing';
+                                thief.timer = 0;
+                            }
+                        } else {
+                            // Wander
+                            thief.model.rotation.y += delta;
+                            thief.model.position.addScaledVector(new THREE.Vector3(Math.sin(thief.model.rotation.y), 0, Math.cos(thief.model.rotation.y)), 2 * delta);
+                        }
+                    } else if (thief.state === 'stealing') {
+                        thief.timer += delta;
+                        if (thief.timer > 3) {
+                            if (thief.targetPlot && thief.targetPlot.state === 2) {
+                                showNotification(`🤬 โจรขโมย ${SEEDS[thief.targetPlot.seedType].name} ไปแล้ว!`, 'bg-red-600');
+                                resetPlot(thief.targetPlot);
+                            }
+                            thief.state = 'fleeing';
+                        }
+                    } else if (thief.state === 'fleeing') {
+                        const dir = new THREE.Vector3(0, 0, 0).sub(thief.model.position); // Flee outwards
+                        dir.y = 0;
+                        dir.normalize();
+                        thief.model.position.addScaledVector(dir, -6 * delta); 
+                        thief.model.rotation.y = Math.atan2(-dir.x, -dir.z);
+                        
+                        if (thief.model.position.length() > islandRadius + 2) {
+                            scene.remove(thief.model);
+                            thieves.splice(i, 1);
+                        }
+                    }
+                }
+
+                // --- 5. Robot Logic ---
+                if (hasRobot && robotModel) {
+                    robotModel.userData.timer += delta;
+                    if (robotModel.userData.timer > 1.0) { // Think every 1s
+                        robotModel.userData.timer = 0;
+                        if (!robotModel.userData.target) {
+                            // 1. Priority: Find bug (Robot ONLY kills bugs now)
+                            let bugPlots = plots.filter(p => p.hasBug);
+                            if (bugPlots.length > 0) {
+                                robotModel.userData.target = bugPlots[Math.floor(Math.random() * bugPlots.length)];
+                            }
+                        }
+                    }
+
+                    if (robotModel.userData.target) {
+                        const targetPos = robotModel.userData.target.mesh.position;
+                        const dir = targetPos.clone().sub(robotModel.position);
+                        dir.y = 0;
+                        if (dir.length() > 0.5) {
+                            dir.normalize();
+                            robotModel.position.addScaledVector(dir, 4 * delta);
+                            robotModel.rotation.y = Math.atan2(dir.x, dir.z);
+                        } else {
+                            // Action
+                            const plot = robotModel.userData.target;
+                            if (plot.hasBug) {
+                                plot.hasBug = false;
+                                if(plot.bugModel) { scene.remove(plot.bugModel); plot.bugModel = null; }
+                                showNotification("🤖 หุ่นยนต์กำจัดแมลงแล้ว!", "bg-blue-500");
+                            }
+                            robotModel.userData.target = null;
+                        }
+                    }
+                }
+
+                // --- 6. Dog Logic ---
+                if (hasDog && dogModel) {
+                    let target = dogModel.userData.target;
+                    
+                    if (!target) {
+                        // Find thief
+                        let potentialTargets = [];
+                        thieves.forEach(t => { if(t.state !== 'fleeing') potentialTargets.push(t); });
+                        
+                        if (potentialTargets.length > 0) {
+                            target = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                            dogModel.userData.target = target;
+                        }
+                    }
+
+                    if (target) {
+                        const targetPos = target.model.position;
+                        const dir = targetPos.clone().sub(dogModel.position);
+                        dir.y = 0;
+                        if (dir.length() > 1.0) {
+                            dir.normalize();
+                            dogModel.position.addScaledVector(dir, 8 * delta); 
+                            dogModel.rotation.y = Math.atan2(dir.x, dir.z);
+                            
+                            dogModel.userData.walkCycle += delta * 20;
+                            dogModel.position.y = 0.5 + Math.abs(Math.sin(dogModel.userData.walkCycle)) * 0.2;
+                        } else {
+                            if (target.state && target.state !== 'fleeing') {
+                                target.state = 'fleeing'; 
+                                showNotification("🐕 บ๊อกๆ! หมาไล่โจรไปแล้ว!", 'bg-blue-500');
+                            }
+                            dogModel.userData.target = null;
+                        }
+                    } else {
+                        dogModel.position.y = 0.5;
+                        const homePos = new THREE.Vector3(-6, 0.5, -12);
+                        if (dogModel.position.distanceTo(homePos) > 4) {
+                            const dir = homePos.clone().sub(dogModel.position);
+                            dir.y = 0; dir.normalize();
+                            dogModel.position.addScaledVector(dir, 2 * delta);
+                            dogModel.rotation.y = Math.atan2(dir.x, dir.z);
+                        }
+                    }
+                }
+
+                // Camera follow player while allowing OrbitControls rotation
+                const playerDelta = player.position.clone().sub(previousPlayerPos);
+                camera.position.add(playerDelta);
+                controls.target.copy(player.position);
+                controls.update();
+                previousPlayerPos.copy(player.position);
+
+                if (Math.random() < 0.01) {
+                    checkBankruptcy();
+                }
+            } 
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Action Handlers ---
+        function handlePlotAction(plot) {
+            if (plot.hasBug) {
+                // Kill bug
+                plot.hasBug = false;
+                if(plot.bugModel) { scene.remove(plot.bugModel); plot.bugModel = null; }
+                showNotification("ตีแมลงสำเร็จ!");
+            } else if (plot.state === 0) {
+                // Plant seed
+                if (inventory[activeSeedType] > 0) {
+                    inventory[activeSeedType]--;
+                    plantSeed(plot, activeSeedType);
+                    updateUI();
+                } else {
+                    showNotification(`ไม่มีเมล็ด${SEEDS[activeSeedType].name}!`, 'bg-red-500');
+                }
+            } else if (plot.state === 2) {
+                // Harvest triggers Quiz instead of giving reward instantly
+                triggerQuiz(plot);
+            }
+        }
+
+        function plantSeed(plot, seedType) {
+            plot.state = 1;
+            plot.progress = 0;
+            plot.seedType = seedType;
+            plot.plantModel = createPlantModel(seedType);
+            plot.plantModel.position.copy(plot.mesh.position);
+            plot.plantModel.scale.set(0.1, 0.1, 0.1);
+            scene.add(plot.plantModel);
+        }
+
+        function harvestPlant(plot) {
+            const reward = SEEDS[plot.seedType].reward;
+            coins += reward;
+            score += reward;
+            
+            showNotification(`+${reward}฿`, 'bg-green-600');
+            resetPlot(plot);
+            updateUI();
+        }
+
+        function chaseThief(thief) {
+            thief.state = 'fleeing';
+            showNotification("ชิ่ว! ไล่โจรไปได้แล้ว!", 'bg-green-600');
+        }
+
+        // --- Start System ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start animation loop
+        animate();
+
+    </script>
+</body>
+</html>
